@@ -1,4 +1,4 @@
-namespace AndroidApp1
+namespace AndroidAppPhone
 {
     [Activity(Label = "@string/app_name", MainLauncher = true)]
     public class MainActivity : Activity

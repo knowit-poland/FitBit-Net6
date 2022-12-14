@@ -1,19 +1,24 @@
 namespace AndroidAppWear
 {
     using Android;
+    using Android.Content;
     using Android.Hardware;
     using Android.Nfc;
     using Android.OS;
     using Android.Runtime;
     using Android.Util;
     using Android.Webkit;
+    using AndroidAppWear.Interfaces;
+    using AndroidAppWear.Services;
     using Java.Security;
     using Newtonsoft.Json;
     using System;
+    using System.Diagnostics.Metrics;
     using System.Security.Permissions;
     using System.Timers;
     using Xamarin;
     using Xamarin.Essentials;
+    
 
     [Activity(Label = "@string/app_name", MainLauncher = true)]
     public class MainActivity : Activity, ISensorEventListener
@@ -24,11 +29,14 @@ namespace AndroidAppWear
         Button buttonPause;
         TextView textHR;
         TextView textTime;
-        TextView textLocation;
-        Timer timer = new Timer();
         
+        
+        static IAdvancedTimer timer;
+      
+
         SensorManager mSensorManager;
         Sensor mHeartRateSensor;
+        
 
         short ms = 0;
         short s = 0;
@@ -36,14 +44,19 @@ namespace AndroidAppWear
         short h = 0;
 
         short hr;
+        double latitude;
+        double longitude;
 
-        List<HrSample> hrSamples = new List<HrSample>(); 
+        List<HrSamples> hrSamples = new List<HrSamples>();
+        List<LocationSamples> locationSamples = new List<LocationSamples>();
+        
         protected override async void OnCreate(Bundle? savedInstanceState)
         {
             await TryToGetPermissions();
             base.OnCreate(savedInstanceState);
+            Xamarin.Forms.Forms.Init(this, savedInstanceState);
+            Xamarin.Essentials.Platform.Init(this, savedInstanceState);
 
-            // Set our view from the "main" layout resource
             SetContentView(Resource.Layout.activity_main);
 
 
@@ -52,7 +65,6 @@ namespace AndroidAppWear
             buttonPause = FindViewById<Button>(Resource.Id.button_pause);
             textHR = FindViewById<TextView>(Resource.Id.hr_text);
             textTime = FindViewById<TextView>(Resource.Id.time_text);
-            textLocation = FindViewById<TextView>(Resource.Id.location_text);
 
             buttonPause.Click += ButtonPause_Click;
             buttonStop.Click += ButtonStop_Click;
@@ -65,18 +77,18 @@ namespace AndroidAppWear
                 mHeartRateSensor = mSensorManager.GetDefaultSensor(SensorType.HeartRate);
 
             }
-
+            
+            timer = Xamarin.Forms.DependencyService.Get<IAdvancedTimer>();
+            timer.InitTimer(1000, TimerElapsed, true);
+            
             ButtonStop_Click(null, null);
+            
            
         }
 
-        private bool checkSensor()
-        {
-            if (mSensorManager.GetSensorList(SensorType.HeartRate).Count != 0)
-                return true;
-            return false;
-                
-        }
+        
+
+        
 
         private void restartTimer()
         {
@@ -90,12 +102,6 @@ namespace AndroidAppWear
         {
             if (checkSensor())
                 mSensorManager.RegisterListener(this, mHeartRateSensor, SensorDelay.Normal);
-            
-            timer = new Timer();
-            timer.Interval = 10;
-            timer.Elapsed += Timer_Elapsed;
-            timer.Enabled = true;
-            timer.Start();
 
             buttonStart.Enabled = false;
             buttonStart.Visibility = Android.Views.ViewStates.Invisible;
@@ -104,46 +110,22 @@ namespace AndroidAppWear
             buttonPause.Enabled = true;
             buttonPause.Visibility = Android.Views.ViewStates.Visible;
 
-            
-        }
+            timer.StartTimer();
 
-        private void Timer_Elapsed(object? sender, ElapsedEventArgs e)
-        {
-            ms++;
 
-            if (ms > 99)
-            {
-                s++;
-                ms = 0;
-            }
-            if (s == 59)
-            {
-                m++;
-                s = 0;
-            }
-            if (m == 59)
-            {
-                h++;
-                m = 0;
-            }
-
-            RunOnUiThread(() =>
-            {
-                textTime.Text = String.Format("{0:00}:{1:00}:{2:00}:{3:00}", h, m, s, ms);
-            });
 
         }
-
-        
 
         private void ButtonStop_Click(object? sender, EventArgs e)
         {
+            timer.StopTimer();
+            
             if (checkSensor())
                 mSensorManager.UnregisterListener(this);
             
             RunOnUiThread(() =>
             {
-                textHR.Text = "HR: 0" ;
+                textHR.Text = "HR: " + hr;
             });
 
             buttonStop.Enabled = false;
@@ -154,33 +136,120 @@ namespace AndroidAppWear
             buttonStart.Visibility = Android.Views.ViewStates.Visible;
 
 
-            timer.Enabled = false;
-            timer.Stop();
             restartTimer();
-
-            Data data = new Data()
-            {
-                hrSamples = hrSamples,
-                locationSamples = "location"
-            };
-
-            string toWrite = JsonConvert.SerializeObject(data);
-            File.WriteAllText(@"C:\Users\adakuc\source\repos\AndroidAppWear\AndroidAppWear\json\json.json", toWrite);
-
-
-
-
         }
 
         private void ButtonPause_Click(object? sender, EventArgs e)
         {
-            timer.Enabled = !timer.Enabled;
-            HrSample sample= new HrSample();
-            sample.value = hr;
-            hrSamples.Add(sample);  
-           
+            timer.PauseTimer();
+
+
+            if (buttonPause.Text == "PAUSE")
+            {
+                buttonPause.Text = "START";
+
+
+            }
+            else
+            {
+                buttonPause.Text = "PAUSE";
+            }
         }
 
+
+        private void TimerElapsed(object? sender, EventArgs e)
+        {
+            Xamarin.Forms.Device.BeginInvokeOnMainThread(() =>
+            {
+                //timer.Interval = (timer.Interval);
+                s++;
+
+                if (s == 59)
+                {
+                    m++;
+                    s = 0;
+                }
+                if (m == 59)
+                {
+                    h++;
+                    m = 0;
+                }
+                textTime.Text = String.Format("{0:00}:{1:00}:{2:00}", h, m, s);
+
+                readLocation();
+                var date = DateTime.Now.ToString();
+
+                HrSamples hrSample = new HrSamples(date, hr);
+                LocationSamples locationSample = new LocationSamples(date, latitude, longitude);
+
+
+
+
+                hrSamples.Add(hrSample);
+                locationSamples.Add(locationSample);
+
+                if (s % 5 == 0)
+                {
+                    Data data = new Data()
+                    {
+                        hrSamples = hrSamples,
+                        locationSamples = locationSamples
+                    };
+
+                    string toWrite = JsonConvert.SerializeObject(data, Formatting.Indented);
+
+
+                    Xamarin.Forms.DependencyService.Get<IFileService>().CreateFile(toWrite);
+
+                    string filePath = Xamarin.Forms.DependencyService.Get<FileService>().GetRootPath();
+                    string fileName = Xamarin.Forms.DependencyService.Get<FileService>().Filename;
+                    string printData = File.ReadAllText(filePath + "/" + fileName);
+                    System.Diagnostics.Debug.WriteLine(printData);
+                }
+                else
+                    System.Diagnostics.Debug.WriteLine(String.Format("{0:00}:{1:00}:{2:00}", h, m, s));
+            });
+
+
+        }
+
+        private async void readLocation()
+        {
+            try
+            {
+                var location = await Geolocation.GetLocationAsync(new GeolocationRequest(GeolocationAccuracy.Best, TimeSpan.FromMinutes(1)));
+                
+                if(location == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("noGPS");
+                }
+                else
+                {
+                        RunOnUiThread(() =>
+                        {
+                            latitude = location.Latitude;
+                            longitude = location.Longitude;
+                        
+                        });
+                }
+            }
+            catch (Exception e) 
+            {
+                System.Diagnostics.Debug.WriteLine("Can't read location: " + e.Message);
+            }
+        }
+
+
+
+        #region Sensores
+
+        private bool checkSensor()
+        {
+            if (mSensorManager.GetSensorList(SensorType.HeartRate).Count != 0)
+                return true;
+            return false;
+
+        }
         public void OnAccuracyChanged(Sensor? sensor, [GeneratedEnum] SensorStatus accuracy)
         {
             
@@ -188,15 +257,17 @@ namespace AndroidAppWear
 
         public void OnSensorChanged(SensorEvent? e)
         {
+            hr = (short)e.Values[0];
             RunOnUiThread(() =>
             {
-                hr = (short)e.Values[0];
                 textHR.Text = "HR: " + (int)e.Values[0];
             });
 
         }
 
-        
+        #endregion
+
+
 
         #region RuntimePermissions
 
@@ -214,8 +285,10 @@ namespace AndroidAppWear
 
         readonly string[] PermissionsGroupLocation =
             {
-                            Manifest.Permission.BodySensors, Manifest.Permission.WriteExternalStorage
-             };
+            Manifest.Permission.BodySensors, Manifest.Permission.WriteExternalStorage, 
+            Manifest.Permission.AccessBackgroundLocation, Manifest.Permission.AccessCoarseLocation, 
+            Manifest.Permission.AccessFineLocation
+        };
         async Task GetPermissionsAsync()
         {
             const string permission = Manifest.Permission.BodySensors;
@@ -266,14 +339,13 @@ namespace AndroidAppWear
                         }
                         else
                         {
-                            //Permission Denied :(
-                            Toast.MakeText(this, "Special permissions denied", ToastLength.Short).Show();
 
+                            Toast.MakeText(this, "Special permissions denied", ToastLength.Short).Show();
                         }
                     }
                     break;
             }
-            //base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+            base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
         }
 
         #endregion
