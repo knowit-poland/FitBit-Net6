@@ -23,7 +23,7 @@ namespace AndroidAppWear.Services
             Device.StartTimer(TimeSpan.FromSeconds(1), () =>
             {
                 MessagingCenter.Send<string>(counter.ToString(), "counterValues");
-               // MessagingCenter.Send<string>("lol", "counterValues");
+                // MessagingCenter.Send<string>("lol", "counterValues");
                 //counter++;
 
                 return isRunningTimer;

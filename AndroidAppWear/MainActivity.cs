@@ -77,10 +77,10 @@ namespace AndroidAppWear
                 mHeartRateSensor = mSensorManager.GetDefaultSensor(SensorType.HeartRate);
 
             }
-            
+
             timer = Xamarin.Forms.DependencyService.Get<IAdvancedTimer>();
             timer.InitTimer(1000, TimerElapsed, true);
-            
+
             ButtonStop_Click(null, null);
             
            
@@ -119,7 +119,7 @@ namespace AndroidAppWear
         private void ButtonStop_Click(object? sender, EventArgs e)
         {
             timer.StopTimer();
-            
+
             if (checkSensor())
                 mSensorManager.UnregisterListener(this);
             
