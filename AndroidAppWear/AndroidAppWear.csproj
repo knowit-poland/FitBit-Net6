@@ -13,6 +13,11 @@
   <ItemGroup>
 	  <PackageReference Include="Abp" Version="8.0.0" />
 	  <PackageReference Include="Microsoft.VisualStudio.RemoteControl" Version="16.3.44" />
+    <None Remove="Resources\raw\sound.mp3" />
+  </ItemGroup>
+  <ItemGroup>
+	  <PackageReference Include="Abp" Version="8.0.0" />
+	  <PackageReference Include="Microsoft.VisualStudio.RemoteControl" Version="16.3.44" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
 	  <PackageReference Include="Plugin.AudioRecorder" Version="1.1.0" />
 	  <PackageReference Include="Plugin.BLE" Version="2.1.3" />
