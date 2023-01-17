@@ -10,12 +10,4 @@
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <RootNamespace>AndroidAppWear</RootNamespace>
   </PropertyGroup>
-  <ItemGroup>
-    <None Remove="Resources\raw\sound.mp3" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Microsoft.VisualStudio.RemoteControl" Version="16.3.44" />
-    <PackageReference Include="Xamarin.Forms" Version="5.0.0.2545" />
-    <PackageReference Include="Xamarin.GooglePlayServices.Wearable" Version="118.0.0" />
-  </ItemGroup>
 </Project>
