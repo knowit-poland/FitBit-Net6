@@ -1,5 +1,4 @@
-﻿using Java.Sql;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,15 +6,15 @@ using System.Threading.Tasks;
 
 namespace AndroidAppWear
 {
-    internal class HrSamples
+    internal class AudioSamples
     {
         public string TimeStamp;
-        public short HRValue;
+        public string AudioSample;
 
-        public HrSamples(string date, short value) 
-        { 
+        public AudioSamples(string date, string audioSample)
+        {
             this.TimeStamp = date;
-            this.HRValue = value;
+            this.AudioSample = audioSample;
         }
     }
 }
