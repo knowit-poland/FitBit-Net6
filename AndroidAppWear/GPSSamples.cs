@@ -9,14 +9,14 @@ namespace AndroidAppWear
     internal class GPSSamples
     {
         public string TimeStamp;
-        public double Latitute;
-        public double Longitute;
+        public double Latitude;
+        public double Longitude;
 
-        public GPSSamples(string date, double latitute, double longitute)
+        public GPSSamples(string date, double latitude, double longitude)
         {
             this.TimeStamp = date;
-            this.Latitute = latitute;
-            this.Longitute = longitute;
+            this.Latitude = latitude;
+            this.Longitude = longitude;
         }   
     }
 }

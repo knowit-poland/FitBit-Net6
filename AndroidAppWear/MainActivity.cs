@@ -4,25 +4,12 @@ using Android.Hardware;
 using Android.Nfc;
 using Android.OS;
 using Android.Runtime;
-using AndroidAppWear.Interfaces;
 using Newtonsoft.Json;
 using Xamarin.Essentials;
 using Android.Gms.Common.Apis;
-using Android.Gms.Wearable;
-using Android.Gms.Common;
 using Android.Bluetooth;
 using Java.Util;
-using Android.Media;
-using Plugin.AudioRecorder;
 using AndroidAppWear.Services;
-using Android.Graphics;
-using static Android.Provider.CalendarContract;
-using Java.Sql;
-//using Abp.Events.Bus;
-//using static Xamarin.Essentials.Platform;
-//using static Xamarin.Essentials.Platform;
-//using static Xamarin.Essentials.Platform;
-//using Java.IO;
 
 namespace AndroidAppWear
 {
@@ -32,138 +19,101 @@ namespace AndroidAppWear
     [Activity(Label = "@string/app_name", MainLauncher = true)]
     public class MainActivity : Activity, ISensorEventListener
     {
+        
+        private Button buttonStart;
+        private Button buttonStop;
+        private TextView textHR;
+        private TextView textTime;
 
-        Button buttonStart;
-        Button buttonStop;
-        Button buttonPause;
-        TextView textHR;
-        TextView textTime;
+        private Intent timerIntent;
 
+        private AudioService audioService;
 
-        //static IAdvancedTimer timer;
-        Intent timerIntent;
-        Intent btStringIntent;
-        Intent btAudioIntent;
+        private SensorManager mSensorManager;
+        private Sensor mHeartRateSensor;
 
-        SensorManager mSensorManager;
-        Sensor mHeartRateSensor;
+        private short s = 0;
+        private short m = 0;
+        private short h = 0;
 
+        private short hr = 0;
+        private double latitude;
+        private double longitude;
 
-        short s = 0;
-        short m = 0;
-        short h = 0;
+        private const int RequestLocationId = 0;
 
-        short hr;
-        double latitude;
-        double longitude;
-        string audioS;
-
-        List<HrSamples> hrSamples = new List<HrSamples>();
-        List<GPSSamples> locationSamples = new List<GPSSamples>();
-        List<AudioSamples> audioSamples = new List<AudioSamples>();
-
-
-
-        BluetoothAdapter adapter;
-        BluetoothDevice phone;
-        BluetoothSocket phoneSocketString = null;
-        BluetoothSocket phoneSocketAudio = null;
-        const string MY_PHONE_ADDRESS = "B8:3B:CC:3F:9A:03";
-
-        //BluetoothService btService;
-        //BluetoothAudioService btAudioService;
-
-        private AudioRecorderService recorder;
-        //AudioPlayer player = new AudioPlayer();
-        //AudioPlayer player = new AudioPlayer();
-        // player;
-        //AudioPlayer player;
-
+        private List<HrSamples> hrSamples = new List<HrSamples>();
+        private List<GPSSamples> locationSamples = new List<GPSSamples>();
+        private List<AudioSamples> audioSamples = new List<AudioSamples>();
+        
+        private BluetoothAdapter adapter;
+        private BluetoothDevice phone;
+        private BluetoothSocket phoneSocketString = null;
+        private const string MY_PHONE_ADDRESS = "B8:3B:CC:3F:9A:03";
+        
 
 
         protected override async void OnCreate(Bundle? savedInstanceState)
         {
 
             base.OnCreate(savedInstanceState);
-            Xamarin.Essentials.Platform.Init(this, savedInstanceState);
-            global::Xamarin.Forms.Forms.Init(this, savedInstanceState);
-
+            TryToGetPermissions();
             SetContentView(Resource.Layout.activity_main);
-
-
+            
             buttonStart = FindViewById<Button>(Resource.Id.button_start);
             buttonStop = FindViewById<Button>(Resource.Id.button_stop);
-            buttonPause = FindViewById<Button>(Resource.Id.button_pause);
             textHR = FindViewById<TextView>(Resource.Id.hr_text);
             textTime = FindViewById<TextView>(Resource.Id.time_text);
-
-            buttonPause.Click += ButtonPause_Click;
+            
             buttonStop.Click += ButtonStop_Click;
             buttonStart.Click += ButtonStart_Click;
-
-
+            
             mSensorManager = ((SensorManager)GetSystemService(SensorService));
             if (checkSensor())
             {
                 mHeartRateSensor = mSensorManager.GetDefaultSensor(SensorType.HeartRate);
-
             }
-
-            //timer = Xamarin.Forms.DependencyService.Get<IAdvancedTimer>();
-            //timer.InitTimer(1000, TimerElapsed, true);
+            
             timerIntent = new Intent(this, typeof(TimerService));
-            btAudioIntent = new Intent(this, typeof(BluetoothAudioService));
-            btStringIntent = new Intent(this, typeof(BluetoothService));
             var filter = new IntentFilter(TimerService.BROADCAST_ACTION);
             RegisterReceiver(new TimerReceiver(this), filter);
 
-            adapter = BluetoothAdapter.DefaultAdapter;
-            phone = null;
-
-            //fileName = Application.Context.GetExternalFilesDir(null).ToString();
-            //fileName = Application.Context.GetExternalFilesDir(null).ToString();
-
-            //fileName += "/audiorecordtest.3gp";
-            TryToGetPermissions();
-
-            checkBluetoothConnection();
-            //blSocketAudio();
-            blSocketString();
-
-            //if (checkBluetoothConnection())
-            // blSocket();
-            //StartClient();
-
-            recorder = new AudioRecorderService()
-            {
-                StopRecordingAfterTimeout = true,
-                TotalAudioTimeout = TimeSpan.FromSeconds(2) 
-            };
-            //player = new MediaPlayer();
-            //player.SetDataSource(@"Resources\raw\sound.mp3");
-            //player = MediaPlayer.Create(this, Resource.Raw.sound);
-            //AudioPlayer player;
-            //player.Prepare();
-            //Android.Net.Uri uri = new Android.Net.Uri(@"Resources/raw/sound.mp3")
-            //Uri soundPath = new Uri(@"Resources/raw/sound.mp3");
-            //player = MediaPlayer.Create(this, soundPath)
-
-            //player = new AudioPlayer();
-
-
-
-
-
-
-            ButtonStop_Click(null, null);
-
-
+            audioService = new AudioService();
+            
+            textTime.Text = String.Format("{0:00}:{1:00}:{2:00}", h, m, s);
+            textHR.Text = "HR: " + hr;
+            buttonStop.Enabled = false;
+            buttonStop.Visibility = Android.Views.ViewStates.Invisible;
+            buttonStart.Enabled = true;
+            buttonStart.Visibility = Android.Views.ViewStates.Visible;
+        
         }
 
 
         #region Buttons
         private void ButtonStart_Click(object? sender, EventArgs e)
         {
+            checkBluetoothConnection();
+            blSocketString();
+            if (!adapter.IsEnabled)
+            {
+                Toast.MakeText(this, "Turn on Bluetooth", ToastLength.Short).Show();
+                adapter = null;
+                phone = null;
+                phoneSocketString = null;
+                return;
+            }
+            if(phoneSocketString == null || !phoneSocketString.IsConnected)
+            {
+                Toast.MakeText(this, "Turn on app on phone", ToastLength.Short).Show();
+                adapter = null;
+                phone = null;
+                phoneSocketString = null;
+                return;
+            }
+                
+
+                restartTimer();
             if (checkSensor())
                 mSensorManager.RegisterListener(this, mHeartRateSensor, SensorDelay.Normal);
 
@@ -171,21 +121,13 @@ namespace AndroidAppWear
             buttonStart.Visibility = Android.Views.ViewStates.Invisible;
             buttonStop.Enabled = true;
             buttonStop.Visibility = Android.Views.ViewStates.Visible;
-            buttonPause.Enabled = true;
-            buttonPause.Visibility = Android.Views.ViewStates.Visible;
-
-
-
-
-            //timer.StartTimer();
+            
             StartService(timerIntent);
-
-
+        
         }
 
         private void ButtonStop_Click(object? sender, EventArgs e)
         {
-            //timer.StopTimer();
             StopService(timerIntent);
 
             if (checkSensor())
@@ -198,110 +140,36 @@ namespace AndroidAppWear
 
             buttonStop.Enabled = false;
             buttonStop.Visibility = Android.Views.ViewStates.Invisible;
-            buttonPause.Enabled = false;
-            buttonPause.Visibility = Android.Views.ViewStates.Invisible;
             buttonStart.Enabled = true;
             buttonStart.Visibility = Android.Views.ViewStates.Visible;
-
-
-            restartTimer();
-            Thread.Sleep(3000);
+            
             SendMessage("stop");
 
         }
 
-        private void ButtonPause_Click(object? sender, EventArgs e)
-        {
-            //timer.PauseTimer();
-
-
-            if (buttonPause.Text == "PAUSE")
-            {
-                buttonPause.Text = "START";
-                try
-                {
-                    //startRecording();
-                }
-                catch (Java.Lang.Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine("Error in play audio " + ex.Message);
-                }
-
-
-
-            }
-            else
-            {
-                buttonPause.Text = "PAUSE";
-
-                //SendRecord();
-
-                //PlayAudio();
-
-            }
-
-
-
-        }
-
         #endregion
-
-
+        
         #region Timer
-        public void TimerElapsed()
+        public async void TimerElapsed()
         {
-
-            s++;
-
-
+            
+                textTime.Text = String.Format("{0:00}:{1:00}:{2:00}", h, m, s);
+                s++;
+            
             if (s == 59)
             {
-                m++;
-                s = 0;
-
-                Data data = new Data()
-                {
-                    HRSamples = hrSamples,
-                    GPSSamples = locationSamples,
-                    AudioSamples = audioSamples
-                };
-
-
-                string toWrite = JsonConvert.SerializeObject(data);
-                System.Diagnostics.Debug.WriteLine(toWrite.Length);
-                SendMessage(toWrite + "key");
-                //btService.SendMessage(toWrite);
-                //Xamarin.Forms.DependencyService.Get<IFileService>().CreateFile(toWrite);
-
-                //string filePath = Xamarin.Forms.DependencyService.Get<FileService>().GetRootPath();
-                //string fileName = Xamarin.Forms.DependencyService.Get<FileService>().Filename;
-                // string printData = File.ReadAllText(filePath + "/" + fileName);
-                //System.Diagnostics.Debug.WriteLine(printData);
-                //if (phoneSocket.IsConnected)
-                //    sendByBT(toWrite);
-                //else
-                //    System.Diagnostics.Debug.WriteLine("I have no connection");
-
-                hrSamples.Clear();
-                locationSamples.Clear();
-                audioSamples.Clear();
+                Task.Run(() => MakeMessage());
             }
             else if (s == 25 || s == 50)
             {
-                startRecording();
+                Task.Run(() => RecordSound());
             }
             if (m == 59)
             {
                 h++;
                 m = 0;
             }
-
-            RunOnUiThread(() =>
-            {
-                textTime.Text = String.Format("{0:00}:{1:00}:{2:00}", h, m, s);
-            });
-
-
+            
             readLocation();
             var date = DateTime.Now.ToString("s") + "+00:00";
             HrSamples hrSample = new HrSamples(date, hr);
@@ -309,16 +177,38 @@ namespace AndroidAppWear
 
             hrSamples.Add(hrSample);
             locationSamples.Add(locationSample);
+        
+        }
+
+        private void MakeMessage()
+        {
+            m++;
+            s = 0;
+
+            Data data = new Data()
+            {
+                AudioSamples = audioSamples,
+                HRSamples = hrSamples,
+                GPSSamples = locationSamples,
+                UserID = "SamsungWear",
+                id = Guid.NewGuid().ToString()
+            };
 
 
+            string toWrite = JsonConvert.SerializeObject(data);
+            SendMessage(toWrite + "key");
 
+            hrSamples.Clear();
+            locationSamples.Clear();
+            audioSamples.Clear();
+        }
 
-
-
-            System.Diagnostics.Debug.WriteLine(String.Format("{0:00}:{1:00}:{2:00}", h, m, s));
-
-
-
+        private void RecordSound()
+        {
+            var sample = audioService.RecordSound();
+            var d = DateTime.Now.ToString("s") + "+00:00";
+            AudioSamples audioSample = new AudioSamples(d, sample);
+            audioSamples.Add(audioSample);
         }
 
         private void restartTimer()
@@ -340,14 +230,17 @@ namespace AndroidAppWear
             {
                 if (intent.Action == TimerService.BROADCAST_ACTION)
                 {
+
                     _mainActivity.TimerElapsed();
+                    
                 }
             }
+
+           
         }
-
+        
         #endregion
-
-
+        
         #region Bluetooth
         private void checkBluetoothConnection()
         {
@@ -371,13 +264,11 @@ namespace AndroidAppWear
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("There are no devices");
                     Toast.MakeText(Application.Context, "There are no devices", ToastLength.Long).Show();
                 }
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine("Bluetooth adapter is not enabled");
                 Toast.MakeText(Application.Context, "Bluetooth adapter is not enabled", ToastLength.Long).Show();
             }
 
@@ -387,7 +278,6 @@ namespace AndroidAppWear
         {
             if (phone == null)
             {
-                System.Diagnostics.Debug.WriteLine("Phone is not avaible");
                 Toast.MakeText(Application.Context, "Phone is not avaible", ToastLength.Long).Show();
                 return;
             }
@@ -399,56 +289,18 @@ namespace AndroidAppWear
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("phone socket error " + ex.Message.ToString());
-                Toast.MakeText(Application.Context, "phone socket error " + ex.Message.ToString(), ToastLength.Long).Show();
+                phoneSocketString = null;
             }
 
 
 
 
         }
-
-        //private void blSocketAudio()
-        //{
-        //    if (phone == null)
-        //    {
-        //        System.Diagnostics.Debug.WriteLine("Phone is not avaible");
-        //        Toast.MakeText(Application.Context, "Phone is not avaible", ToastLength.Long).Show();
-        //        return;
-        //    }
-
-        //    phoneSocketAudio = phone.CreateInsecureRfcommSocketToServiceRecord(UUID.FromString("00001101-0000-1000-8000-00805F9B34FC"));
-        //    try
-        //    {
-        //        phoneSocketAudio.Connect();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        System.Diagnostics.Debug.WriteLine("phone socket error " + ex.Message.ToString());
-        //        Toast.MakeText(Application.Context, "phone socket error " + ex.Message.ToString(), ToastLength.Long).Show();
-        //    }
-
-
-
-
-        //}
-
+        
         public void SendMessage(string message)
         {
+            
 
-            //checkBluetoothConnection();
-            //blSocket();
-
-            /*try
-            {
-                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(message);
-                phoneSocket.OutputStream.WriteAsync(bytes);
-            }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine("Problem " + e.Message.ToString());
-                Toast.MakeText(Application.Context, "Problem " + e.Message.ToString(), ToastLength.Short).Show();
-            }*/
             if (phoneSocketString != null && phoneSocketString.IsConnected)
             {
                 try
@@ -458,18 +310,23 @@ namespace AndroidAppWear
                 }
                 catch (Exception e)
                 {
-                    System.Diagnostics.Debug.WriteLine("Problem " + e.Message.ToString());
-                    Toast.MakeText(Application.Context, "Problem " + e.Message.ToString(), ToastLength.Short).Show();
+                    Toast.MakeText(Application.Context, "Error", ToastLength.Short).Show();
                 }
+                
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine("Problem with phoneSocket");
+                Toast.MakeText(Application.Context, "Phone lost", ToastLength.Short).Show();
+            }
+            if(message == "stop")
+            {
+                adapter = null;
+                phone = null;
+                phoneSocketString = null;
             }
         }
         #endregion
-
-
+        
         #region Sensores
 
         private async void readLocation()
@@ -511,7 +368,7 @@ namespace AndroidAppWear
         }
         public void OnAccuracyChanged(Sensor? sensor, [GeneratedEnum] SensorStatus accuracy)
         {
-
+            
         }
 
         public void OnSensorChanged(SensorEvent? e)
@@ -528,7 +385,7 @@ namespace AndroidAppWear
 
         #region RuntimePermissions
 
-        void TryToGetPermissions()
+        private async void TryToGetPermissions()
         {
             if ((int)Build.VERSION.SdkInt >= 23)
             {
@@ -538,53 +395,50 @@ namespace AndroidAppWear
 
 
         }
-        private int requestLocationId = 0;
-
-        Dictionary<int, string> PermissionsGroup = new Dictionary<int, string>()
-        {
-            {0,Manifest.Permission.BodySensors },
-            {1,Manifest.Permission.WriteExternalStorage },
-            {2,Manifest.Permission.ReadExternalStorage },
-            {3,Manifest.Permission.AccessBackgroundLocation },
-            {4,Manifest.Permission.AccessCoarseLocation },
-            {5,Manifest.Permission.AccessFineLocation },
-            {6,Manifest.Permission.RecordAudio },
-            {7,Manifest.Permission.CaptureAudioOutput },
-
-        };
 
 
-
-        readonly string[] PermissionsGroupLocation =
+        private readonly string[] PermissionsGroupLocation =
             {
-            Manifest.Permission.BodySensors, Manifest.Permission.WriteExternalStorage,
-            Manifest.Permission.ReadExternalStorage, Manifest.Permission.AccessBackgroundLocation,
+            Manifest.Permission.BodySensors,  Manifest.Permission.AccessBackgroundLocation,
             Manifest.Permission.AccessCoarseLocation, Manifest.Permission.AccessFineLocation, Manifest.Permission.RecordAudio,
-            Manifest.Permission.Internet, Manifest.Permission.WakeLock
+            Manifest.Permission.Internet, Manifest.Permission.WakeLock, Manifest.Permission.Bluetooth, Manifest.Permission.BluetoothAdmin,
+            Manifest.Permission.WriteExternalStorage, Manifest.Permission.ReadExternalStorage,
         };
-        void GetPermissionsAsync()
+        private async Task GetPermissionsAsync()
         {
-            foreach (var permission in PermissionsGroupLocation)
-            {
+            var permissions = PermissionsGroupLocation;
 
+            var grantedPermissions = new List<string>();
+            var deniedPermissions = new List<string>();
+
+            foreach (var permission in permissions)
+            {
                 if (CheckSelfPermission(permission) == (int)Android.Content.PM.Permission.Granted)
                 {
-                    //TODO change the message to show the permissions name
-                    Toast.MakeText(this, "Special permissions granted1", ToastLength.Short).Show();
-
-                    System.Diagnostics.Debug.WriteLine("\n\n\n\n\n\n\n\n\n\n\nSpecial permissions granted1" + permission);
+                    grantedPermissions.Add(permission);
                 }
-
-
-                if (ShouldShowRequestPermissionRationale(permission))
+                else
                 {
-                    //set alert for executing the task
+                    deniedPermissions.Add(permission);
+                }
+            }
+
+            if (grantedPermissions.Count == permissions.Length)
+            {
+                Toast.MakeText(this, "All permissions granted", ToastLength.Short).Show();
+                return;
+            }
+
+            if (deniedPermissions.Count > 0)
+            {
+                if (ShouldShowRequestPermissionRationale(deniedPermissions[0]))
+                {
                     AlertDialog.Builder alert = new AlertDialog.Builder(this);
                     alert.SetTitle("Permissions Needed");
-                    alert.SetMessage("The application need special permissions to continue");
+                    alert.SetMessage("The application needs special permissions to continue");
                     alert.SetPositiveButton("Request Permissions", (senderAlert, args) =>
                     {
-                        RequestPermissions(PermissionsGroupLocation, requestLocationId);
+                        RequestPermissions(deniedPermissions.ToArray(), RequestLocationId);
                     });
 
                     alert.SetNegativeButton("Cancel", (senderAlert, args) =>
@@ -595,107 +449,45 @@ namespace AndroidAppWear
                     Dialog dialog = alert.Create();
                     dialog.Show();
 
-
+                    return;
                 }
 
-
-                RequestPermissions(PermissionsGroupLocation, requestLocationId);
-                requestLocationId++;
-            }
-
-        }
-        /* public override async void OnRequestPermissionsResult(int requestCode, string[] permissions, [GeneratedEnum] Android.Content.PM.Permission[] grantResults)
-         {
-             switch (requestCode)
-             {
-                 case requestLocationId:
-                     {
-                         if (grantResults[0] == (int)Android.Content.PM.Permission.Granted)
-                         {
-                             Toast.MakeText(this, "Special permissions granted", ToastLength.Short).Show();
-
-                         }
-                         else
-                         {
-
-                             Toast.MakeText(this, "Special permissions denied", ToastLength.Short).Show();
-                         }
-                     }
-                     break;
-             }
-             base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
-         }*/
-        
-
-        #endregion
-
-
-        #region recordSound
-
-        private async Task startRecording()
-        {
-            try
-            {
-                if (!recorder.IsRecording)
-                {
-                    Toast.MakeText(this, "speak", ToastLength.Short).Show();
-                    await recorder.StartRecording();
-                    System.Threading.Thread.Sleep(3500);
-                    recorder.StopRecording();
-                    System.Diagnostics.Debug.WriteLine(recorder.GetAudioFilePath());
-                    byte[] audioBytes = await File.ReadAllBytesAsync(recorder.GetAudioFilePath());
-                    var sample = Convert.ToBase64String(audioBytes);
-                    //player.Play(recorder.GetAudioFilePath());
-                    System.Diagnostics.Debug.Write(sample.Length);
-
-                    var date = DateTime.Now.ToString("s") + "+00:00";
-                    AudioSamples audioSample = new AudioSamples(date, sample);
-
-                    audioSamples.Add(audioSample);
-                }
-
-            }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine("Can't make record " + e.Message);
+                RequestPermissions(deniedPermissions.ToArray(), RequestLocationId);
             }
         }
 
-        /*async Task SendRecord(string fileName)
+        public override async void OnRequestPermissionsResult(int requestCode, string[] permissions, [GeneratedEnum] Android.Content.PM.Permission[] grantResults)
         {
-            if (recorder.FilePath != null) 
+            switch (requestCode)
             {
-                
-               // var fileName = recorder.GetAudioFilePath();
-               try
-                {
+                case RequestLocationId:
+                    {
+                        var grantedPermissions = new List<string>();
+                        var deniedPermissions = new List<string>();
 
-                    System.Diagnostics.Debug.WriteLine(fileName);
-                    byte[] bytes = File.ReadAllBytes(fileName);
-                    //var audioSample = Convert.ToBase64String(bytes);
+                        for (int i = 0; i < grantResults.Length; i++)
+                        {
+                            if (grantResults[i] == (int)Android.Content.PM.Permission.Granted)
+                            {
+                                grantedPermissions.Add(permissions[i]);
+                            }
+                            else
+                            {
+                                deniedPermissions.Add(permissions[i]);
+                            }
+                        }
 
-                    // Wyslij dane przez gniazdo Bluetooth
-                    phoneSocketAudio.OutputStream.Write(bytes, 0, bytes.Length);
-
-                    //phoneSocket.Close();
-                }
-                catch (IOException e)
-                {
-                    System.Diagnostics.Debug.WriteLine("Can't send record " + e.Message);
-                    Toast.MakeText(this, "Can't send record " + e.Message, ToastLength. Long).Show();
-                }
-               
+                        if (grantedPermissions.Count == permissions.Length)
+                        {
+                            Toast.MakeText(this, "All permissions granted", ToastLength.Short).Show();
+                        }
+                        else if (deniedPermissions.Count > 0)
+                        {
+                            Toast.MakeText(this, "Some permissions denied", ToastLength.Short).Show();
+                        }
+                    }
+                    break;
             }
-        }
-        */
-
-
-        void PlayAudio()
-        {
-
-            //player.Play()
-
-
         }
 
         #endregion

@@ -32,15 +32,7 @@
             android:width="50px"
             android:height="50px"
             android:clickable="true"/>
-        <Button
-            android:text="PAUSE"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:id="@+id/button_pause"
-            android:layout_gravity="center"
-            android:width="50px"
-            android:height="50px"
-            android:layout_marginRight="50dp" />
+        
         <Button
             android:text="STOP"
             android:layout_width="wrap_content"
@@ -48,15 +40,8 @@
             android:id="@+id/button_stop"
             android:layout_gravity="center"
             android:width="50px"
-            android:height="50px"
-            android:layout_marginLeft="50dp" />
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/app_text"
-            android:id="@+id/location_text"
-            android:layout_gravity="top|center" 
-            android:layout_marginTop="20dp" />/>
+            android:height="50px"/>
+        />
 
     </FrameLayout>
 </androidx.wear.widget.BoxInsetLayout>

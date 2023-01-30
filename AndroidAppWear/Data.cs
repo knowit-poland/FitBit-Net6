@@ -8,9 +8,10 @@ namespace AndroidAppWear
 {
     internal class Data
     {
+        public List<AudioSamples> AudioSamples { get; set; }
         public List<HrSamples> HRSamples { get; set; }
         public List<GPSSamples> GPSSamples { get; set; }
-        public List<AudioSamples> AudioSamples { get; set; }
-        public string UserID = "adaśbardzozmęczony";
+        public string UserID { get; set; }
+        public string id { get; set; }
     }
 }

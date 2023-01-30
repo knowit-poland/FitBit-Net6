@@ -2,6 +2,7 @@
 using Android.Bluetooth;
 using Android.Content;
 using Android.Content.Res;
+using Android.Locations;
 using Android.Media;
 using Android.Nfc;
 using Android.OS;
@@ -9,15 +10,8 @@ using Android.Runtime;
 using Android.Util;
 using Android.Widget;
 using AndroidAppWear;
-using AndroidAppWear.Interfaces;
 using AndroidAppWear.Services;
-using Java.IO;
-using Java.Net;
 using Java.Util;
-using Java.Util.Logging;
-using System.IO;
-using System.Net.Sockets;
-using System.Text;
 
 namespace AndroidAppWear
 {
@@ -26,16 +20,18 @@ namespace AndroidAppWear
     {
 
         private TextView textBL;
+        private Button listenButton;
         private BluetoothAdapter adapter;
         private BluetoothServerSocket ServerSocketString;
-        private BluetoothServerSocket ServerSocketAudio;
 
         private BluetoothSocket watchSocketString = null;
-        private BluetoothSocket watchSocketAudio = null;
-        private const string Message = "ThIsAAsAAparatoooor";
-        string toFileWrite;
+        private string toFileWrite;
+        private const int RequestLocationId = 0;
 
-        int it = 0;
+        private HTTPService httpservice;
+        private FileService fileservice;
+
+        private int it = 0;
 
         const string MY_WATCH_ADRESS = "64:5D:F4:66:EF:33";
         protected override async void OnCreate(Bundle? savedInstanceState)
@@ -43,110 +39,140 @@ namespace AndroidAppWear
             base.OnCreate(savedInstanceState);
             SetContentView(Resource.Layout.activity_main);
             Xamarin.Forms.Forms.Init(this, savedInstanceState);
-            HTTPService https;
 
             textBL = FindViewById<TextView>(Resource.Id.bl_text);
-            textBL.Text = "nowa wiadomość ";
+            textBL.Text = "press button to connect with watch";
 
-            adapter = BluetoothAdapter.DefaultAdapter;
+            listenButton = FindViewById<Button>(Resource.Id.buttonListen);
+            listenButton.Click += ListenButton_Click;
 
 
-
-
+            httpservice = new HTTPService();
+            fileservice = new FileService();
 
             TryToGetPermissions();
 
 
-            https = new HTTPService();
+            httpservice = new HTTPService();
+        }
+
+        private async void ListenButton_Click(object? sender, EventArgs e)
+        {
             checkBluetoothConnectionString();
             blSocketString();
 
             if (watchSocketString != null)
             {
+                textBL.Text = "Connected with watch";
+                listenButton.Enabled = false;
                 await ReadFromBt();
             }
-            //if (watchSocketAudio != null)
-            //{
-            // await readRecord();
-
-
         }
+
 
         #region RuntimePermissions
 
-        async Task TryToGetPermissions()
+        private async void TryToGetPermissions()
         {
             if ((int)Build.VERSION.SdkInt >= 23)
             {
-                await GetPermissionsAsync();
+                GetPermissionsAsync();
                 return;
             }
 
 
         }
-        const int RequestLocationId = 0;
 
-        readonly string[] PermissionsGroupLocation =
+
+        private readonly string[] PermissionsGroupLocation =
             {
-            Manifest.Permission.WriteExternalStorage
+            Manifest.Permission.Internet, Manifest.Permission.Bluetooth, Manifest.Permission.BluetoothAdmin,
+            Manifest.Permission.WriteExternalStorage, Manifest.Permission.ReadExternalStorage
         };
-        async Task GetPermissionsAsync()
+        private async Task GetPermissionsAsync()
         {
-            const string permission = Manifest.Permission.BodySensors;
+            var permissions = PermissionsGroupLocation;
 
-            if (CheckSelfPermission(permission) == (int)Android.Content.PM.Permission.Granted)
+            var grantedPermissions = new List<string>();
+            var deniedPermissions = new List<string>();
+
+            foreach (var permission in permissions)
             {
-                //TODO change the message to show the permissions name
-                Toast.MakeText(this, "Special permissions granted1", ToastLength.Short).Show();
+                if (CheckSelfPermission(permission) == (int)Android.Content.PM.Permission.Granted)
+                {
+                    grantedPermissions.Add(permission);
+                }
+                else
+                {
+                    deniedPermissions.Add(permission);
+                }
+            }
+
+            if (grantedPermissions.Count == permissions.Length)
+            {
+                Toast.MakeText(this, "All permissions granted", ToastLength.Short).Show();
                 return;
             }
 
-            if (ShouldShowRequestPermissionRationale(permission))
+            if (deniedPermissions.Count > 0)
             {
-                //set alert for executing the task
-                AlertDialog.Builder alert = new AlertDialog.Builder(this);
-                alert.SetTitle("Permissions Needed");
-                alert.SetMessage("The application need special permissions to continue");
-                alert.SetPositiveButton("Request Permissions", (senderAlert, args) =>
+                if (ShouldShowRequestPermissionRationale(deniedPermissions[0]))
                 {
-                    RequestPermissions(PermissionsGroupLocation, RequestLocationId);
-                });
+                    AlertDialog.Builder alert = new AlertDialog.Builder(this);
+                    alert.SetTitle("Permissions Needed");
+                    alert.SetMessage("The application needs special permissions to continue");
+                    alert.SetPositiveButton("Request Permissions", (senderAlert, args) =>
+                    {
+                        RequestPermissions(deniedPermissions.ToArray(), RequestLocationId);
+                    });
 
-                alert.SetNegativeButton("Cancel", (senderAlert, args) =>
-                {
-                    Toast.MakeText(this, "Cancelled!", ToastLength.Short).Show();
-                });
+                    alert.SetNegativeButton("Cancel", (senderAlert, args) =>
+                    {
+                        Toast.MakeText(this, "Cancelled!", ToastLength.Short).Show();
+                    });
 
-                Dialog dialog = alert.Create();
-                dialog.Show();
+                    Dialog dialog = alert.Create();
+                    dialog.Show();
 
+                    return;
+                }
 
-                return;
+                RequestPermissions(deniedPermissions.ToArray(), RequestLocationId);
             }
-
-            RequestPermissions(PermissionsGroupLocation, RequestLocationId);
-
         }
+
         public override async void OnRequestPermissionsResult(int requestCode, string[] permissions, [GeneratedEnum] Android.Content.PM.Permission[] grantResults)
         {
             switch (requestCode)
             {
                 case RequestLocationId:
                     {
-                        if (grantResults[0] == (int)Android.Content.PM.Permission.Granted)
-                        {
-                            Toast.MakeText(this, "Special permissions granted", ToastLength.Short).Show();
+                        var grantedPermissions = new List<string>();
+                        var deniedPermissions = new List<string>();
 
+                        for (int i = 0; i < grantResults.Length; i++)
+                        {
+                            if (grantResults[i] == (int)Android.Content.PM.Permission.Granted)
+                            {
+                                grantedPermissions.Add(permissions[i]);
+                            }
+                            else
+                            {
+                                deniedPermissions.Add(permissions[i]);
+                            }
                         }
-                        else
-                        {
 
-                            Toast.MakeText(this, "Special permissions denied", ToastLength.Short).Show();
+                        if (grantedPermissions.Count == permissions.Length)
+                        {
+                            Toast.MakeText(this, "All permissions granted", ToastLength.Short).Show();
+                        }
+                        else if (deniedPermissions.Count > 0)
+                        {
+                            Toast.MakeText(this, "Some permissions denied", ToastLength.Short).Show();
                         }
                     }
                     break;
             }
-            base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
         }
 
         #endregion
@@ -155,10 +181,9 @@ namespace AndroidAppWear
 
         private void checkBluetoothConnectionString()
         {
+            adapter = BluetoothAdapter.DefaultAdapter;
             if (adapter.IsEnabled)
             {
-                System.Diagnostics.Debug.WriteLine("Bluettoh is enabled\n\n\n\n\n");
-
                 BluetoothServerSocket tmp = null;
                 try
                 {
@@ -166,116 +191,66 @@ namespace AndroidAppWear
                 }
                 catch (Exception e)
                 {
-                    System.Diagnostics.Debug.WriteLine("Error in listenig ");
+                    Toast.MakeText(this, "Phone is not paired", ToastLength.Long).Show();
+                    textBL.Text = "press button to connect with watch";
+                    listenButton.Enabled = true;
                 }
                 ServerSocketString = tmp;
             }
             else
             {
 
-                System.Diagnostics.Debug.WriteLine("Not Devices \n\n\n\n\n");
+                Toast.MakeText(this, "Turn on Bluetooth", ToastLength.Long).Show();
             }
         }
 
-        private void checkBluetoothConnectionAudio()
-        {
-            if (adapter.IsEnabled)
-            {
-                System.Diagnostics.Debug.WriteLine("Bluettoh is enabled\n\n\n\n\n");
 
-                BluetoothServerSocket tmp = null;
-                try
-                {
-                    tmp = adapter.ListenUsingInsecureRfcommWithServiceRecord("MyAppServer", UUID.FromString("00001101-0000-1000-8000-00805F9B34FC"));
-
-                }
-                catch (Exception e)
-                {
-                    System.Diagnostics.Debug.WriteLine("Error in listenig ");
-                }
-                ServerSocketAudio = tmp;
-            }
-            else
-            {
-
-                System.Diagnostics.Debug.WriteLine("Not Devices \n\n\n\n\n");
-            }
-        }
 
         private async void blSocketString()
         {
-
-            if (ServerSocketString == null)
+            if (!adapter.IsEnabled)
             {
-                System.Diagnostics.Debug.WriteLine("Phone is not avaible \n\n\n\n\n");
+                return;
+            }
+
+            else if (ServerSocketString == null)
+            {
                 return;
             }
 
             try
             {
+                
                 watchSocketString = ServerSocketString.Accept();
-            }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine("phone socket error " + e.Message.ToString());
-            }
-
-
-
-
-        }
-
-        private async void blSocketAudio()
-        {
-
-            if (ServerSocketAudio == null)
-            {
                 System.Diagnostics.Debug.WriteLine("Phone is not avaible \n\n\n\n\n");
-                return;
-            }
-
-            try
-            {
-                watchSocketAudio = ServerSocketAudio.Accept();
             }
             catch (Exception e)
             {
-                System.Diagnostics.Debug.WriteLine("phone socket error " + e.Message.ToString());
+                textBL.Text = "press button to connect with watch";
+                listenButton.Enabled = true;
+                watchSocketString = null;
             }
         }
-
-
 
         private async Task ReadFromBt()
         {
-            System.Diagnostics.Debug.WriteLine("wear soccet connected string");
             var bytes = new byte[2000000];
-            while (watchSocketString.IsConnected)
+            while (true)
             {
                 var numBytesRead = await watchSocketString.InputStream.ReadAsync(bytes, 0, bytes.Length);
-                //System.Diagnostics.Debug.WriteLine(numBytesRead);
                 string receivedString = System.Text.Encoding.UTF8.GetString(bytes, 0, numBytesRead);
-                System.Diagnostics.Debug.WriteLine(receivedString);
                 toFileWrite += receivedString;
 
                 if (receivedString.EndsWith("key"))
                 {
-                    System.Diagnostics.Debug.WriteLine("receiveed" + receivedString);
-
-
-                    //watchSocketString.Close();
-                    //textBL.Text = receivedString;
-
                     try
                     {
-
+                        it++;
                         System.Diagnostics.Debug.WriteLine("for file " + toFileWrite);
+                        System.Diagnostics.Debug.WriteLine("for file " + toFileWrite.Length);
                         toFileWrite = toFileWrite.Remove(toFileWrite.Length - 3);
-                        Xamarin.Forms.DependencyService.Get<IFileService>().CreateFile(toFileWrite);
-                        //System.Diagnostics.Debug.WriteLine("file");
-                        //string filePath = Xamarin.Forms.DependencyService.Get<FileService>().GetRootPath();
-                        //string fileName = Xamarin.Forms.DependencyService.Get<FileService>().Filename;
-                        //string printData = (filePath + "/" + fileName);
+                        var fileName = "jsonFile" + it + ".json";
+                        fileservice.CreateFile(toFileWrite, fileName);
                         toFileWrite = null;
                     }
                     catch (Exception e)
@@ -283,43 +258,24 @@ namespace AndroidAppWear
                         System.Diagnostics.Debug.WriteLine("cant write to file " + e.Message);
                     }
                 }
-                if(receivedString == "stop")
+                if (receivedString == "stop")
                 {
                     System.Diagnostics.Debug.WriteLine("stopped");
-                }
-            }
-        }
-
-
-        async Task readRecord()
-        {
-            System.Diagnostics.Debug.WriteLine("wear socet connected audio");
-            while (watchSocketAudio.IsConnected)
-            {
-
-                //var bytes = new byte[1024];
-                //var numBytesRead = await watchSocketString.InputStream.ReadAsync(bytes, 0, bytes.Length);
-                string filePath = Xamarin.Forms.DependencyService.Get<FileService>().GetRootPath();
-                string fileIt = "plik" + it++ + ".wav";
-                string fileName = filePath + "/" + fileIt;
-                var buffer = new byte[300];
-
-                using (var mmInStream = watchSocketAudio.InputStream)
-                using (var file = new FileOutputStream(fileName))
-                {
-                    int bytesRead = 0;
-                    System.Diagnostics.Debug.WriteLine("Written audio");
-                    while ((bytesRead = await mmInStream.ReadAsync(buffer)) > 0)
-                    {
-                        file.Write(buffer, 0, bytesRead);
-                    }
-                    System.Diagnostics.Debug.WriteLine("Written audio");
-
+                    toFileWrite = null;
+                    await httpservice.sendHTTPPost(it);
+                    ServerSocketString.Close();
+                    watchSocketString.Close();
+                    adapter = null;
+                    ServerSocketString = null;
+                    watchSocketString = null;
+                    textBL.Text = "press button to connect with watch";
+                    listenButton.Enabled = true;
+                    if (watchSocketString == null || !watchSocketString.IsConnected)
+                        return;
 
                 }
-                System.Diagnostics.Debug.WriteLine("Written audio");
+
             }
-            System.Diagnostics.Debug.WriteLine("Written audio");
 
 
         }

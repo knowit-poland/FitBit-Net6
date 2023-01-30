@@ -4,16 +4,27 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
-    <TextView 
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_centerInParent="true"
-        android:text="@string/app_text"
-    />
     <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="bluetooth"
-            android:id="@+id/bl_text"
-            android:layout_gravity="center" />
+        android:text="Text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        
+        android:minWidth="50px"
+        android:minHeight="50px"
+        android:id="@+id/bl_text"
+        android:layout_marginTop="10.3dp"
+        android:gravity="top|center" />/>
+    <Button
+        android:text="Button"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minWidth="25px"
+        android:minHeight="25px"
+        android:id="@+id/buttonListen"
+        android:layout_marginTop="57.2dp" />
+    
+    
+    
+    
+    
 </RelativeLayout>

@@ -13,7 +13,7 @@
   <ItemGroup>
 	  <PackageReference Include="Abp" Version="8.0.0" />
 	  <PackageReference Include="Microsoft.VisualStudio.RemoteControl" Version="16.3.44" />
-    <None Remove="Resources\raw\sound.mp3" />
+	  <None Remove="Resources\raw\jak.wav" />
   </ItemGroup>
   <ItemGroup>
 	  <PackageReference Include="Abp" Version="8.0.0" />
@@ -30,6 +30,5 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="json\" />
-    <Folder Include="Resources\raw\" />
   </ItemGroup>
 </Project>
