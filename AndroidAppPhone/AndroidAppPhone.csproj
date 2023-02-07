@@ -18,6 +18,6 @@
     <PackageReference Include="Microsoft.VisualStudio.RemoteControl" Version="16.3.44" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
     <PackageReference Include="Xamarin.Forms" Version="5.0.0.2545" />
-    <PackageReference Include="Xamarin.GooglePlayServices.Wearable" Version="118.0.0" />
+    <PackageReference Include="Xamarin.GooglePlayServices.Wearable" Version="118.0.0.1" />
   </ItemGroup>
 </Project>
